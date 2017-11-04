@@ -47,5 +47,23 @@ def main():
     for name, param in regression_model.named_parameters():
         print("%s: %.3f" % (name, param.data.numpy()))
 
+def model(data):
+    # Create unit normal priors over the parameters
+    x_data = data[:, :-1]
+    y_data = data[:, -1]
+    mu, sigma = Variable(torch.zeros(p, 1)), Variable(10 * torch.ones(p, 1))
+    bias_mu, bias_sigma = Variable(torch.zeros(1)), Variable(10 * torch.ones(1))
+    w_prior, b_prior = Normal(mu, sigma), Normal(bias_mu, bias_sigma)
+    priors = {'linear.weight': w_prior, 'linear.bias': b_prior}
+    # lift module parameters to random variables
+    lifted_module = pyro.random_module("module", regression_model, priors)
+    # sample a nn (which also samples w and b)
+    lifted_nn = lifted_module()
+    # run the nn forward
+    latent = lifted_nn(x_data).squeeze()
+    # condition on the observed data
+    pyro.observe("obs", Normal(latent, Variable(0.1 * torch.ones(data.size(0)))),
+                 y_data.squeeze())
+
 if __name__ == '__main__':
     main()
